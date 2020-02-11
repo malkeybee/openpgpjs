@@ -649,7 +649,8 @@ function tests() {
     const message = await openpgp.message.readArmored(msgAsciiArmored);
     const verified = await openpgp.verify({
       publicKeys: pubKey,
-      message
+      message,
+      format: 'binary'
     });
     expect(util.isStream(verified.data)).to.equal(expectedType);
     const reader = openpgp.stream.getReader(verified.data);
@@ -733,7 +734,8 @@ function tests() {
     const message = await openpgp.message.readArmored(msgAsciiArmored);
     const verified = await openpgp.verify({
       publicKeys: pubKey,
-      message
+      message,
+      format: 'binary'
     });
     expect(util.isStream(verified.data)).to.equal(expectedType);
     const reader = openpgp.stream.getReader(verified.data);
@@ -766,7 +768,7 @@ function tests() {
       publicKeys: pubKey,
       message: openpgp.message.fromText('hello world')
     });
-    expect(openpgp.util.decode_utf8(verified.data)).to.equal('hello world');
+    expect(verified.data).to.equal('hello world');
     expect(verified.signatures).to.exist.and.have.length(1);
     expect(verified.signatures[0].valid).to.be.true;
   });
@@ -794,7 +796,7 @@ function tests() {
       publicKeys: pubKey,
       message: openpgp.message.fromText('hello world')
     });
-    expect(openpgp.util.decode_utf8(verified.data)).to.equal('hello world');
+    expect(verified.data).to.equal('hello world');
     expect(verified.signatures).to.exist.and.have.length(1);
     expect(verified.signatures[0].valid).to.be.true;
   });
@@ -825,7 +827,7 @@ function tests() {
       publicKeys: pub,
       message: openpgp.message.fromText('hello world')
     });
-    expect(openpgp.util.decode_utf8(verified.data)).to.equal('hello world');
+    expect(verified.data).to.equal('hello world');
     expect(verified.signatures).to.exist.and.have.length(1);
     expect(verified.signatures[0].valid).to.be.true;
   });
@@ -856,7 +858,7 @@ function tests() {
       publicKeys: pub,
       message: openpgp.message.fromText('hello world')
     });
-    expect(openpgp.util.decode_utf8(verified.data)).to.equal('hello world');
+    expect(verified.data).to.equal('hello world');
     expect(verified.signatures).to.exist.and.have.length(1);
     expect(verified.signatures[0].valid).to.be.true;
   });
