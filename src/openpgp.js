@@ -306,9 +306,9 @@ export function encryptKey({ privateKey, passphrase }) {
  *
  *     {
  *       data: String|ReadableStream<String>|NodeStream, (if `armor` was true, the default)
- *       message: Message, (if `armor` was false)
+ *       data: Uint8Array|ReadableStream<Uint8Array>|NodeStream, (if `armor` was false)
  *       signature: String|ReadableStream<String>|NodeStream, (if `detached` was true and `armor` was true)
- *       signature: Signature (if `detached` was true and `armor` was false)
+ *       signature: Uint8Array|ReadableStream<Uint8Array>|NodeStream (if `detached` was true and `armor` was false)
  *       sessionKey: { data, algorithm, aeadAlgorithm } (if `returnSessionKey` was true)
  *     }
  * @async
@@ -328,7 +328,7 @@ export function encrypt({ message, publicKeys, privateKeys, passwords, sessionKe
     if (privateKeys.length || signature) { // sign the message only if private keys or signature is specified
       if (detached) {
         const detachedSignature = await message.signDetached(privateKeys, signature, date, fromUserIds, message.fromStream);
-        result.signature = armor ? detachedSignature.armor() : detachedSignature;
+        result.signature = armor ? detachedSignature.armor() : detachedSignature.write();
       } else {
         message = await message.sign(privateKeys, signature, date, fromUserIds, message.fromStream);
       }
@@ -337,15 +337,11 @@ export function encrypt({ message, publicKeys, privateKeys, passwords, sessionKe
     return message.encrypt(publicKeys, passwords, sessionKey, wildcard, date, toUserIds, streaming);
 
   }).then(async encrypted => {
-    if (armor) {
-      result.data = encrypted.message.armor();
-    } else {
-      result.message = encrypted.message;
-    }
+    result.data = armor ? encrypted.message.armor() : encrypted.message.write();
     if (returnSessionKey) {
       result.sessionKey = encrypted.sessionKey;
     }
-    return convertStreams(result, streaming, armor ? ['signature', 'data'] : []);
+    return convertStreams(result, streaming, ['signature', 'data']);
   }).catch(onError.bind(null, 'Error encrypting message'));
 }
 
@@ -422,20 +418,22 @@ export function decrypt({ message, privateKeys, passwords, sessionKeys, publicKe
  *
  *     {
  *       data: String|ReadableStream<String>|NodeStream, (if `armor` was true, the default)
- *       message: Message (if `armor` was false)
+ *       data: Uint8Array|ReadableStream<Uint8Array>|NodeStream (if `armor` was false)
  *     }
  *
  * Or, if `detached` was true:
  *
  *     {
  *       signature: String|ReadableStream<String>|NodeStream, (if `armor` was true, the default)
- *       signature: Signature (if `armor` was false)
+ *       signature: Uint8Array|ReadableStream<Uint8Array>|NodeStream (if `armor` was false)
  *     }
  * @async
  * @static
  */
 export function sign({ message, privateKeys, armor = true, streaming = message && message.fromStream, detached = false, date = new Date(), fromUserIds = [] }) {
   checkCleartextOrMessage(message);
+  if (message instanceof CleartextMessage && !armor) throw new Error("Can't sign non-armored cleartext message");
+  if (message instanceof CleartextMessage && detached) throw new Error("Can't sign detached cleartext message");
   privateKeys = toArray(privateKeys); fromUserIds = toArray(fromUserIds);
   if (asyncProxy) { // use web worker if available
     return asyncProxy.delegate('sign', {
@@ -447,25 +445,19 @@ export function sign({ message, privateKeys, armor = true, streaming = message &
   return Promise.resolve().then(async function() {
     if (detached) {
       const signature = await message.signDetached(privateKeys, undefined, date, fromUserIds, message.fromStream);
-      result.signature = armor ? signature.armor() : signature;
-      if (message.packets) {
-        result.signature = stream.transformPair(message.packets.write(), async (readable, writable) => {
-          await Promise.all([
-            stream.pipe(result.signature, writable),
-            stream.readToEnd(readable).catch(() => {})
-          ]);
-        });
-      }
+      result.signature = armor ? signature.armor() : signature.write();
+      result.signature = stream.transformPair(message.packets.write(), async (readable, writable) => {
+        await Promise.all([
+          stream.pipe(result.signature, writable),
+          stream.readToEnd(readable).catch(() => {})
+        ]);
+      });
     } else {
       message = await message.sign(privateKeys, undefined, date, fromUserIds, message.fromStream);
-      if (armor) {
-        result.data = message.armor();
-      } else {
-        result.message = message;
-      }
+      result.data = armor ? message.armor() : message.write();
     }
-    return convertStreams(result, streaming, armor ? ['signature', 'data'] : []);
-  }).catch(onError.bind(null, 'Error signing cleartext message'));
+    return convertStreams(result, streaming, ['signature', 'data']);
+  }).catch(onError.bind(null, 'Error signing message'));
 }
 
 /**
@@ -507,7 +499,7 @@ export function verify({ message, publicKeys, streaming = message && message.fro
     result.data = await convertStream(result.data, streaming);
     if (!streaming) await prepareSignatures(result.signatures);
     return result;
-  }).catch(onError.bind(null, 'Error verifying cleartext signed message'));
+  }).catch(onError.bind(null, 'Error verifying signed message'));
 }
 
 
